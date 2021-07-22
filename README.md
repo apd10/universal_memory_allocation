@@ -1,7 +1,9 @@
+# Description
 Code for Embeddings with UMA - Universal Memory Allocation
 - The code was modified from the original pytorch Embedding bag code
 - the code is only tested on embedding style scenarios. So beware while using embedding bag
 
+# How to run 
 after checkout run the following to install the UMA
 ```
 python3 setup.py install
@@ -30,3 +32,11 @@ indices = torch.arange(5).cuda(0)
 embeddings1 = E1(indices)
 embeddings2 = E2(indices)
 ```
+
+#While running with CPU
+
+hashedEmbeddingBag is written for GPU.
+In order to use for CPU/GPU , you can directly use
+hashedEmbeddingCPU module. Everything remains the same
+
+
