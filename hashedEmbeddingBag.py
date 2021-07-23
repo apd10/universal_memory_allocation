@@ -12,7 +12,7 @@ import pdb
 
 class HashedEmbeddingBagFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, hashed_weights, indices, offsets, mode, embedding_dim, signature, random_numbers, hmode, keymode, val_offset, norm, key_bits, keys_to_use):
+    def forward(ctx, hashed_weights, indices, offsets, mode, embedding_dim, signature, random_numbers, hmode, keymode, val_offset, norm, key_bits, keys_to_use, uma_chunk_size):
         if indices.dim() == 2:
             if offsets is not None:
                 raise ValueError("if indices is 2D, then offsets has to be None"
@@ -61,7 +61,7 @@ class HashedEmbeddingBagFunction(torch.autograd.Function):
         
         hashed_weights_size = hashed_weights.size(0)
         output, offset2bag, bag_size, max_indices, hashed_idx = \
-            hashed_embedding_bag.forward(hashed_weights, indices, offsets, mode_enum, embedding_dim, signature, random_numbers, hmode_enum, keymode_enum, key_bits, keys_to_use)
+            hashed_embedding_bag.forward(hashed_weights, indices, offsets, mode_enum, embedding_dim, signature, random_numbers, hmode_enum, keymode_enum, key_bits, keys_to_use, uma_chunk_size)
         if norm is not None:
             #assert(keymode_enum == 1)
             output = output/norm
@@ -83,7 +83,7 @@ class HashedEmbeddingBagFunction(torch.autograd.Function):
                 grad, indices, offsets, offset2bag, bag_size, max_indices, hashed_idx, hashed_weights_size, False, mode_enum, embedding_dim)
         elif keymode_enum == 1:
             weight_grad = None
-        return weight_grad, None, None, None, None, None, None, None,None,None,None,None,None
+        return weight_grad, None, None, None, None, None, None, None,None,None,None,None,None, None
     '''
 
     @staticmethod
@@ -121,7 +121,8 @@ class HashedEmbeddingBag(nn.Module):
         hmode = "rand_hash",
         keymode = "keymode_hashweight",
         val_offset = None,
-        seed = 1024)->None:
+        seed = 1024,
+        uma_chunk_size = 1)->None:
         super(HashedEmbeddingBag, self).__init__()
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
@@ -138,6 +139,7 @@ class HashedEmbeddingBag(nn.Module):
         self.norm = None
         self.key_bits = key_bits
         self.keys_to_use = keys_to_use
+        self.uma_chunk_size = uma_chunk_size
         r = np.random.RandomState(seed)
         random_numbers = np.concatenate([np.array([2038074743]), r.randint(0, 2038074743, (50,))]) # set of 50 random numbers to use
         self.random_numbers = torch.from_numpy(random_numbers.astype(np.int64)).to("cuda:0")
@@ -174,7 +176,8 @@ class HashedEmbeddingBag(nn.Module):
         print("HashedEmbeddingBag: ", num_embeddings, embedding_dim, "mode", mode,
               "hmode", hmode, "kmode", keymode, "central", self.central, "key_bits", self.key_bits,
               "keys_to_use", self.keys_to_use,
-              "weight_size", self.weight_size)
+              "weight_size", self.weight_size,
+              "uma_chunk_size", self.uma_chunk_size)
     """
     def reset_parameters(self) -> None:
         # init.normal_(self.weight)
@@ -202,7 +205,8 @@ class HashedEmbeddingBag(nn.Module):
             self.val_offset,
             self.norm,
             self.key_bits,
-            self.keys_to_use
+            self.keys_to_use,
+            self.uma_chunk_size
         )
         embeddings = embeddings.view(*i_shape, embeddings.shape[-1])
         return embeddings

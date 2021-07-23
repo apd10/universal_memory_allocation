@@ -236,7 +236,8 @@ __global__ void hashed_embedding_bag_update_output_kernel(
     int hmode,
     int keymode,
     int key_bits,
-    int keys_to_use)
+    int keys_to_use,
+    int uma_chunk_size)
 {
     /*
         optimizations. modes into template paramters
@@ -264,18 +265,22 @@ __global__ void hashed_embedding_bag_update_output_kernel(
             int64_t bag_size_ = 0;
             int64_t maxWord = -1;
             // from start of bag to end of bag.
+            int64_t hfd = featureDim / uma_chunk_size;
+            int64_t hfd_shift =  featureDim % uma_chunk_size;
             for (int64_t emb = begin; emb < end; emb++) {
                 const int64_t weightRow = input[emb];
                 
                 int64_t hashKey = 0;
                 int64_t hashedWeightIdx = 0;
                 scalar_t weightValue = 0;
+
                 switch (hmode) {
                     case HMODE_LMAHASH:
-                        hashKey = lma_hash_func_e2(weightRow, featureDim, signature[weightRow], key_bits, keys_to_use, random_numbers); // expects a val_offset + value
+                        hashKey = lma_hash_func_e2(weightRow, hfd, signature[weightRow], key_bits, keys_to_use, random_numbers); // expects a val_offset + value
                         break;
                     default: // HMODE_RANDOMHASH
-                        hashKey = hash_func(weightRow, featureDim, random_numbers); // expects a val_offset + value if central
+                        // this will be recomputed within uma_chunk_size. But i think if we want to not do that we need a better grid layout
+                        hashKey = hash_func(weightRow, hfd, random_numbers); // expects a val_offset + value if central
                         break;
                 }
 
@@ -284,7 +289,7 @@ __global__ void hashed_embedding_bag_update_output_kernel(
                         weightValue = keymode_static_pm_parity<scalar_t>(hashKey);
                         break;
                     default: // KEYMODE_HASHWEIGHT
-                        hashedWeightIdx = hashKey % hashedWeightSize;
+                        hashedWeightIdx = hashKey % (hashedWeightSize - uma_chunk_size + 1)+ hfd_shift;
                         hashed_index[emb][featureDim] = hashedWeightIdx;
                         weightValue = hashed_weights[hashedWeightIdx];
                         break;
@@ -396,7 +401,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
     const int64_t hmode,
     const int64_t keymode,
     const int64_t key_bits,
-    const int64_t keys_to_use)
+    const int64_t keys_to_use,
+    const int64_t uma_chunk_size)
 {
     int64_t numIndices = indices.size(0);
     int64_t numBags = offsets.size(0);
@@ -446,7 +452,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
             hmode,
             keymode,
             key_bits,
-            keys_to_use);
+            keys_to_use,
+            uma_chunk_size);
     }));
     cudaDeviceSynchronize(); // TODO 1: remove this. this will wait for all sreams to synchronize. we dont want that.
                              // instead use cudaStreamSynchronize
@@ -634,7 +641,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
     const int64_t hmode,
     const int64_t keymode,
     const int64_t key_bits, 
-    const int64_t keys_to_use) 
+    const int64_t keys_to_use,
+    const int64_t uma_chunk_size) 
 {
   
     if (keymode == KEYMODE_HASHWEIGHT) {
@@ -646,7 +654,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
         CHECK_INPUT(signature);
     }
 
-    return hashed_embedding_bag_cuda_forward(hashed_weights, indices, offsets, mode, embedding_dim, signature, random_numbers, hmode, keymode, key_bits, keys_to_use);
+    return hashed_embedding_bag_cuda_forward(hashed_weights, indices, offsets, mode, embedding_dim, signature, random_numbers, hmode, keymode, key_bits, keys_to_use, uma_chunk_size);
 }
 
 
