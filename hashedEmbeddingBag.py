@@ -142,12 +142,12 @@ class HashedEmbeddingBag(nn.Module):
         self.uma_chunk_size = uma_chunk_size
         r = np.random.RandomState(seed)
         random_numbers = np.concatenate([np.array([2038074743]), r.randint(0, 2038074743, (50,))]) # set of 50 random numbers to use
-        self.random_numbers = torch.from_numpy(random_numbers.astype(np.int64)).to("cuda:0")
+        self.random_numbers = Parameter(torch.from_numpy(random_numbers.astype(np.int64)), requires_grad=False)
         print("RandomNumbers: ", self.random_numbers[:5])
         
         if self.signature is None:
                 val = np.zeros(shape=(2,))
-                self.signature = torch.from_numpy(val.astype(np.int64)).to("cuda:0")
+                self.signature = Parameter(torch.from_numpy(val.astype(np.int64)), requires_grad=False)
         if _weight is None :
             if keymode == "keymode_hashweight":
                 low = -math.sqrt(1 / self.num_embeddings)
@@ -156,7 +156,7 @@ class HashedEmbeddingBag(nn.Module):
             else:
                 self.weight_size = 2
                 val = np.random.uniform(low = -1, high = 1, size=(self.weight_size,))
-                self.hashed_weight = torch.from_numpy(val.astype(np.float32)).to("cuda:0")
+                self.hashed_weight = Parameter(torch.from_numpy(val.astype(np.float32)), requires_grad=False)
                 self.hashed_weight.requires_grad = False
                 self.norm = (self.embedding_dim / 32)
                 #self.norm = np.sqrt(self.embedding_dim)

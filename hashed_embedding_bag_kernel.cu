@@ -423,7 +423,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
         max_indices = at::empty({0, 0}, indices.options());
     } 
     
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream(); 
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream(indices.device().index()); 
 
 #ifdef __HIP_PLATFORM_HCC__
     dim3 block = dim3(64, 4);
@@ -480,7 +480,7 @@ torch::Tensor hashed_embedding_bag_sum_backward(
         return weight_grad;
     }
 
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream(indices.device().index());
     torch::Tensor flattened_hash_index = hash_index.flatten();
     int64_t numel = flattened_hash_index.size(0);
 
