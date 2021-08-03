@@ -1,10 +1,10 @@
 # Description
-Code for Embeddings with UMA - Universal Memory Allocation
+Code for Embeddings with Random Offset Block Embedding Array (ROBE)
 - The code was modified from the original pytorch Embedding bag code
 - the code is only tested on embedding style scenarios. So beware while using embedding bag
 
 # How to run 
-after checkout run the following to install the UMA
+after checkout run the following to install the ROBE/UMA
 ```
 python3 setup.py install
 ```
@@ -17,8 +17,8 @@ import torch.nn as nn
 import numpy as np
 
 
-uma_size = 1000
-_weight = nn.Parameter( torch.from_numpy( np.random.uniform(low = -0.001, high=0.001, size=((uma_size, ))).astype(np.float32)))
+robe_size = 1000
+_weight = nn.Parameter( torch.from_numpy( np.random.uniform(low = -0.001, high=0.001, size=((robe_size, ))).astype(np.float32)))
 
 n1 = 100000
 m1 = 16
