@@ -6,15 +6,16 @@ import torch.nn.init as init
 import numpy as np
 from torch.nn.parameter import Parameter
 import math
+import pdb
 
 
 class UMAEmbeddingFunc(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, hashed_weights, indices, embedding_dim, val_offset, P, A, B, C, hashed_weights_size, helper_E1sR, helper_Eidx):
+    def forward(ctx, hashed_weights, indices, embedding_dim, val_offset, P, A, B, C, hashed_weights_size, helper_E1sR, helper_Eidx_base, helper_Eidx_offset, uma_chunk_size):
         assert(indices.dim() == 1) # indices has tobe a one dimensional array of integers.
 
         #hashed_idx = (((((indices.view(-1,1) + val_offset) * helper_E1sR) % P + helper_Eidx * B)%P + A) % P) % hashed_weights_size
-        hashed_idx = (((((indices.view(-1,1) + val_offset) * helper_E1sR) + helper_Eidx * B) + A) % P) % hashed_weights_size
+        hashed_idx = ((((((indices.view(-1,1) + val_offset) * helper_E1sR) + helper_Eidx_base * B) + A) % P) % (hashed_weights_size -uma_chunk_size +1) + helper_Eidx_offset)
         output = hashed_weights[hashed_idx] 
         #output, hashed_idx = \
         #    rma.forward(hashed_weights, indices, embedding_dim, random_numbers, val_offset)
@@ -39,7 +40,7 @@ class UMAEmbeddingFunc(torch.autograd.Function):
         weight_grad.scatter_add_(0, hashed_idx1, grad1)
         #weight_grad = rma.backward(
         #        grad, indices, hashed_idx, hashed_weights_size, embedding_dim)
-        return weight_grad, None, None, None, None, None, None, None, None, None, None
+        return weight_grad, None, None, None, None, None, None, None, None, None, None, None, None
 
 class HashedEmbeddingCPU(nn.Module):
     def __init__(
@@ -48,6 +49,7 @@ class HashedEmbeddingCPU(nn.Module):
         embedding_dim: int, 
         _weight: torch.Tensor,
         val_offset: int,
+        uma_chunk_size = 1,
         seed = 1024)->None:
         super(HashedEmbeddingCPU, self).__init__()
         self.num_embeddings = num_embeddings
@@ -56,26 +58,29 @@ class HashedEmbeddingCPU(nn.Module):
         self.seed = seed
         self.weight = nn.Parameter(_weight, requires_grad = True) # add to parameter
         self.weights_size = self.weight.numel()
+        self.uma_chunk_size = uma_chunk_size
 
 
         r = np.random.RandomState(seed)
         random_numbers = np.concatenate([np.array([2038074743]), r.randint(0, 2038074743, (10,))]) # 10 random numbers
         random_numbers = torch.from_numpy(random_numbers.astype(np.int64))
         print("[Seed]", seed, "First 5 random numbers: ", random_numbers[:5])
-        print("UMA Embedding Object: num_embeddings:{} dim:{} val_offset:{} seed:{} weights_size:{}".format(self.num_embeddings, self.embedding_dim,
-                          self.val_offset, self.seed, self.weights_size), flush=True)
+        print("UMA Embedding Object: num_embeddings:{} dim:{} val_offset:{} seed:{} weights_size:{} uma_chunk_size:{}".format(self.num_embeddings, self.embedding_dim,
+                          self.val_offset, self.seed, self.weights_size, self.uma_chunk_size), flush=True)
 
         # helpers to compute
-        helper_Eidx = torch.LongTensor(np.arange(self.embedding_dim))
+        helper_Eidx_base = torch.LongTensor(np.arange(self.embedding_dim) / self.uma_chunk_size)
+        helper_Eidx_offset = torch.LongTensor(np.arange(self.embedding_dim) % self.uma_chunk_size) 
         helper_E1sR = torch.LongTensor(np.ones(self.embedding_dim) * int(random_numbers[3])) # A
 
         # adding to parameters
         self.random_numbers = nn.Parameter(random_numbers, requires_grad=False)
-        self.helper_Eidx = nn.Parameter(helper_Eidx, requires_grad=False)
+        self.helper_Eidx_base = nn.Parameter(helper_Eidx_base, requires_grad=False)
+        self.helper_Eidx_offset = nn.Parameter(helper_Eidx_offset, requires_grad=False)
         self.helper_E1sR = nn.Parameter(helper_E1sR, requires_grad=False)
 
 
-    def forward(self, indices: torch.Tensor) -> torch.Tensor:
+    def forward(self, indices: torch.Tensor, offsets=None, per_sample_weights=None) -> torch.Tensor:
 
         #def forward(ctx, hashed_weights, indices, embedding_dim, val_offset, P, A, B, hashed_weights_size, helper_E1sR, helper_Eidx):
         embeddings =  UMAEmbeddingFunc.apply(
@@ -89,6 +94,8 @@ class HashedEmbeddingCPU(nn.Module):
             self.random_numbers[3],
             self.weights_size,
             self.helper_E1sR,
-            self.helper_Eidx
+            self.helper_Eidx_base,
+            self.helper_Eidx_offset,
+            self.uma_chunk_size
         )
         return embeddings

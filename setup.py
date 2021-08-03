@@ -7,6 +7,6 @@ setup(
         'hashed_embedding_bag', 
         [#'hashed_embedding_bag1.cpp',
         'hashed_embedding_bag_kernel.cu'])],
-    py_modules=['hashedEmbeddingBag'],
+    py_modules=['hashedEmbeddingBag', 'hashedEmbeddingCPU'],
     cmdclass={'build_ext': BuildExtension}
 )
