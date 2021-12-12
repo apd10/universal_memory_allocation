@@ -84,8 +84,9 @@ class HashedEmbeddingBagFunction(torch.autograd.Function):
         elif keymode_enum == 1:
             weight_grad = None
         return weight_grad, None, None, None, None, None, None, None,None,None,None,None,None, None
-    '''
 
+    # use this when we just want the embedding and not the bag
+    '''
     @staticmethod
     def backward(ctx, grad):
         keymode_enum = ctx.keymode_enum
@@ -100,13 +101,12 @@ class HashedEmbeddingBagFunction(torch.autograd.Function):
                 grad1 = grad.view(-1)
             else:
                 grad1 = grad.reshape(-1)
-            weight_grad = torch.zeros(hashed_weights_size).to(indices.device)
-            weight_grad.scatter_add_(0, hashed_idx1, grad1)
+            hashed_weight_grad = torch.zeros((hashed_weights_size,),dtype=torch.float32, device=indices.device) 
+            hashed_weight_grad.scatter_add_(0, hashed_idx1, grad1)
         elif keymode_enum == 1:
             weight_grad = None
-        return weight_grad, None, None, None, None, None, None, None,None,None,None,None
+        return hashed_weight_grad, None, None, None, None, None, None, None,None,None,None,None,None, None
     '''
-
 class HashedEmbeddingBag(nn.Module):
     def __init__(
         self, 
