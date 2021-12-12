@@ -36,7 +36,7 @@ class UMAEmbeddingFunc(torch.autograd.Function):
             grad1 = grad.view(-1)
         else:
             grad1 = grad.reshape(-1)
-        weight_grad = torch.zeros(hashed_weights_size).to(indices.device)
+        weight_grad = torch.zeros((hashed_weights_size,),dtype=torch.float32, device=indices.device) 
         weight_grad.scatter_add_(0, hashed_idx1, grad1)
         #weight_grad = rma.backward(
         #        grad, indices, hashed_idx, hashed_weights_size, embedding_dim)
