@@ -122,7 +122,8 @@ class HashedEmbeddingBag(nn.Module):
         keymode = "keymode_hashweight",
         val_offset = None,
         seed = 1024,
-        uma_chunk_size = 1)->None:
+        uma_chunk_size = 1,
+        padding_idx = None)->None:
         super(HashedEmbeddingBag, self).__init__()
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
@@ -140,6 +141,7 @@ class HashedEmbeddingBag(nn.Module):
         self.key_bits = key_bits
         self.keys_to_use = keys_to_use
         self.uma_chunk_size = uma_chunk_size
+        self.padding_idx = padding_idx
         r = np.random.RandomState(seed)
         random_numbers = np.concatenate([np.array([2038074743]), r.randint(0, 2038074743, (50,))]) # set of 50 random numbers to use
         self.random_numbers = Parameter(torch.from_numpy(random_numbers.astype(np.int64)), requires_grad=False)
@@ -177,7 +179,8 @@ class HashedEmbeddingBag(nn.Module):
               "hmode", hmode, "kmode", keymode, "central", self.central, "key_bits", self.key_bits,
               "keys_to_use", self.keys_to_use,
               "weight_size", self.weight_size,
-              "uma_chunk_size", self.uma_chunk_size)
+              "uma_chunk_size", self.uma_chunk_size, 
+              "seed", seed)
     """
     def reset_parameters(self) -> None:
         # init.normal_(self.weight)
@@ -189,8 +192,15 @@ class HashedEmbeddingBag(nn.Module):
     def forward(self, indices: torch.Tensor, offsets: Optional[torch.Tensor] = None, per_sample_weights=None) -> torch.Tensor:
         i_shape = indices.shape
         indices = indices.view(-1)
+        if self.padding_idx is not None:
+            original_count = indices.shape[0]
+            indx_mask = (indices != self.padding_idx)
+            indx_padd_mask = (indices == self.padding_idx)
+            indices = indices[indx_mask]
+
         if offsets is None:
             offsets  = torch.arange(len(indices)).to(indices.device)
+
         assert(per_sample_weights is None)
         embeddings =  HashedEmbeddingBagFunction.apply(
             self.hashed_weight,
@@ -208,6 +218,10 @@ class HashedEmbeddingBag(nn.Module):
             self.keys_to_use,
             self.uma_chunk_size
         )
+        if self.padding_idx is not None:
+            Aembeddings = torch.zeros(original_count, self.embedding_dim, device=indices.device)
+            Aembeddings[indx_mask,:] = embeddings[:,:]
+            embeddings = Aembeddings
         embeddings = embeddings.view(*i_shape, embeddings.shape[-1])
         return embeddings
 

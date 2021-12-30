@@ -455,7 +455,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
             keys_to_use,
             uma_chunk_size);
     }));
-    cudaDeviceSynchronize(); // TODO 1: remove this. this will wait for all sreams to synchronize. we dont want that.
+    //cudaDeviceSynchronize(); // TODO 1: remove this. this will wait for all sreams to synchronize. we dont want that.
                              // instead use cudaStreamSynchronize
 
     return std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>(
