@@ -294,6 +294,7 @@ __global__ void hashed_embedding_bag_update_output_kernel(
                         weightValue = hashed_weights[hashedWeightIdx];
                         break;
                 }
+                //printf("%d[%d] %d[%d] %d %f [%d]\n", (int) emb, (int)weightRow, (int) featureDim, (int)hfd, (int)hashedWeightIdx, (float) weightValue, (int)hashKey);
                 
 
                 if (mode == MODE_MAX) {

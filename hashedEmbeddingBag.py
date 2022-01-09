@@ -9,10 +9,11 @@ import math
 
 import hashed_embedding_bag
 import pdb
+#from torch_sparse import coalesce
 
 class HashedEmbeddingBagFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, hashed_weights, indices, offsets, mode, embedding_dim, signature, random_numbers, hmode, keymode, val_offset, norm, key_bits, keys_to_use, uma_chunk_size):
+    def forward(ctx, hashed_weights, indices, offsets, mode, embedding_dim, signature, random_numbers, hmode, keymode, val_offset, norm, key_bits, keys_to_use, uma_chunk_size, no_bag, sparse):
         if indices.dim() == 2:
             if offsets is not None:
                 raise ValueError("if indices is 2D, then offsets has to be None"
@@ -69,6 +70,8 @@ class HashedEmbeddingBagFunction(torch.autograd.Function):
         ctx.mode_enum = mode_enum
         ctx.hashed_weights_size = hashed_weights_size
         ctx.keymode_enum = keymode_enum
+        ctx.sparse = sparse
+        ctx.no_bag = no_bag
         return output
 
     @staticmethod
@@ -79,16 +82,31 @@ class HashedEmbeddingBagFunction(torch.autograd.Function):
         keymode_enum = ctx.keymode_enum
         embedding_dim = grad.size(1)
         if keymode_enum == 0:
-            weight_grad = hashed_embedding_bag.backward(
-                grad, indices, offsets, offset2bag, bag_size, max_indices, hashed_idx, hashed_weights_size, False, mode_enum, embedding_dim)
+            if not ctx.no_bag:
+                weight_grad = hashed_embedding_bag.backward(
+                    grad, indices, offsets, offset2bag, bag_size, max_indices, hashed_idx, hashed_weights_size, False, mode_enum, embedding_dim)
+            else:
+                hashed_idx1 = hashed_idx.reshape(-1)
+                grad1 = grad.view(-1)
+                if ctx.sparse:
+                    unique, inv_idx = torch.unique(hashed_idx1, return_inverse=True)
+                    values = torch.zeros(unique.shape, device=indices.device, dtype=torch.float32)
+                    values.scatter_add_(0,inv_idx, grad1)
+                    weight_grad = torch.sparse_coo_tensor(unique.view(1, -1), values, (ctx.hashed_weights_size,), device=indices.device)
+                    #unique, values = coalesce(torch.stack([torch.zeros(hashed_idx1.shape[0], device=indices.device, dtype=hashed_idx1.dtype), hashed_idx1]), grad1, m=1, n=ctx.hashed_weights_size, op='add')
+                    #weight_grad = torch.sparse_coo_tensor(unique[1].view(1,-1), values, (ctx.hashed_weights_size,), device=indices.device)
+                else:
+                    weight_grad = torch.zeros((hashed_weights_size,),dtype=torch.float32, device=indices.device) 
+                    weight_grad.scatter_add_(0, hashed_idx1, grad1)
         elif keymode_enum == 1:
             weight_grad = None
-        return weight_grad, None, None, None, None, None, None, None,None,None,None,None,None, None
+        return weight_grad, None, None, None, None, None, None, None,None,None,None,None,None, None, None, None
 
     # use this when we just want the embedding and not the bag
     '''
     @staticmethod
     def backward(ctx, grad):
+ONLY_EMBEDDING to false
         keymode_enum = ctx.keymode_enum
         if keymode_enum == 0:
             indices, offsets, offset2bag, bag_size, max_indices, hashed_idx = ctx.saved_variables
@@ -106,7 +124,8 @@ class HashedEmbeddingBagFunction(torch.autograd.Function):
         elif keymode_enum == 1:
             weight_grad = None
         return hashed_weight_grad, None, None, None, None, None, None, None,None,None,None,None,None, None
-    '''
+       '''
+
 class HashedEmbeddingBag(nn.Module):
     def __init__(
         self, 
@@ -123,7 +142,9 @@ class HashedEmbeddingBag(nn.Module):
         val_offset = None,
         seed = 1024,
         uma_chunk_size = 1,
-        padding_idx = None)->None:
+        padding_idx = None,:
+        no_bag = False,
+        sparse = False)->None:
         super(HashedEmbeddingBag, self).__init__()
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
@@ -132,6 +153,8 @@ class HashedEmbeddingBag(nn.Module):
         self.weight_size = memory
         if keymode != "keymode_hashweight":
             assert(_weight is None)
+        self.no_bag = no_bag
+        self.sparse = sparse
         self.val_offset = val_offset
         self.mode = mode
         self.hmode = hmode
@@ -179,8 +202,10 @@ class HashedEmbeddingBag(nn.Module):
               "hmode", hmode, "kmode", keymode, "central", self.central, "key_bits", self.key_bits,
               "keys_to_use", self.keys_to_use,
               "weight_size", self.weight_size,
-              "uma_chunk_size", self.uma_chunk_size, 
-              "seed", seed)
+              "seed", seed
+              "uma_chunk_size", self.uma_chunk_size,
+              "no_bag[backward]", self.no_bag,
+              "sparse[backward]", self.sparse)
     """
     def reset_parameters(self) -> None:
         # init.normal_(self.weight)
@@ -199,8 +224,7 @@ class HashedEmbeddingBag(nn.Module):
             indices = indices[indx_mask]
 
         if offsets is None:
-            offsets  = torch.arange(len(indices)).to(indices.device)
-
+            offsets  = torch.arange(len(indices), device = indices.device)
         assert(per_sample_weights is None)
         embeddings =  HashedEmbeddingBagFunction.apply(
             self.hashed_weight,
@@ -216,7 +240,9 @@ class HashedEmbeddingBag(nn.Module):
             self.norm,
             self.key_bits,
             self.keys_to_use,
-            self.uma_chunk_size
+            self.uma_chunk_size,
+            self.no_bag,
+            self.sparse
         )
         if self.padding_idx is not None:
             Aembeddings = torch.zeros(original_count, self.embedding_dim, device=indices.device)
