@@ -22,6 +22,8 @@ config = {
 with open(sys.argv[1], "r") as f:
     config = yaml.load(f)
 
+torch.manual_seed(1)
+np.random.seed(1)
 
 batch = config["batch"]
 Iter = config["Iter"]

@@ -87,7 +87,7 @@ class HashedEmbeddingBagFunction(torch.autograd.Function):
                     grad, indices, offsets, offset2bag, bag_size, max_indices, hashed_idx, hashed_weights_size, False, mode_enum, embedding_dim)
             else:
                 hashed_idx1 = hashed_idx.reshape(-1)
-                grad1 = grad.view(-1)
+                grad1 = grad.reshape(-1)
                 if ctx.sparse:
                     unique, inv_idx = torch.unique(hashed_idx1, return_inverse=True)
                     values = torch.zeros(unique.shape, device=indices.device, dtype=torch.float32)
