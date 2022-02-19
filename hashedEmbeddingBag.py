@@ -59,7 +59,7 @@ class HashedEmbeddingBagFunction(torch.autograd.Function):
         if val_offset is not None:
             indices = indices + val_offset
 
-        
+
         hashed_weights_size = hashed_weights.size(0)
         output, offset2bag, bag_size, max_indices, hashed_idx = \
             hashed_embedding_bag.forward(hashed_weights, indices, offsets, mode_enum, embedding_dim, signature, random_numbers, hmode_enum, keymode_enum, key_bits, keys_to_use, uma_chunk_size)
@@ -96,7 +96,7 @@ class HashedEmbeddingBagFunction(torch.autograd.Function):
                     #unique, values = coalesce(torch.stack([torch.zeros(hashed_idx1.shape[0], device=indices.device, dtype=hashed_idx1.dtype), hashed_idx1]), grad1, m=1, n=ctx.hashed_weights_size, op='add')
                     #weight_grad = torch.sparse_coo_tensor(unique[1].view(1,-1), values, (ctx.hashed_weights_size,), device=indices.device)
                 else:
-                    weight_grad = torch.zeros((hashed_weights_size,),dtype=torch.float32, device=indices.device) 
+                    weight_grad = torch.zeros((hashed_weights_size,),dtype=torch.float32, device=indices.device)
                     weight_grad.scatter_add_(0, hashed_idx1, grad1)
         elif keymode_enum == 1:
             weight_grad = None
@@ -119,7 +119,7 @@ ONLY_EMBEDDING to false
                 grad1 = grad.view(-1)
             else:
                 grad1 = grad.reshape(-1)
-            hashed_weight_grad = torch.zeros((hashed_weights_size,),dtype=torch.float32, device=indices.device) 
+            hashed_weight_grad = torch.zeros((hashed_weights_size,),dtype=torch.float32, device=indices.device)
             hashed_weight_grad.scatter_add_(0, hashed_idx1, grad1)
         elif keymode_enum == 1:
             weight_grad = None
@@ -128,11 +128,11 @@ ONLY_EMBEDDING to false
 
 class HashedEmbeddingBag(nn.Module):
     def __init__(
-        self, 
-        num_embeddings: int, 
-        embedding_dim: int, 
-        compression:float = 1. / 64., 
-        mode:str = "sum", 
+        self,
+        num_embeddings: int,
+        embedding_dim: int,
+        compression:float = 1. / 64.,
+        mode:str = "sum",
         _weight: Optional[torch.Tensor] = None,
         signature: Optional[torch.Tensor] = None,
         key_bits=4,
@@ -144,7 +144,8 @@ class HashedEmbeddingBag(nn.Module):
         uma_chunk_size = 1,
         padding_idx = None,:
         no_bag = False,
-        sparse = False)->None:
+        sparse = False,
+        padding_idx = None )->None:
         super(HashedEmbeddingBag, self).__init__()
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
@@ -169,7 +170,7 @@ class HashedEmbeddingBag(nn.Module):
         random_numbers = np.concatenate([np.array([2038074743]), r.randint(0, 2038074743, (50,))]) # set of 50 random numbers to use
         self.random_numbers = Parameter(torch.from_numpy(random_numbers.astype(np.int64)), requires_grad=False)
         print("RandomNumbers: ", self.random_numbers[:5])
-        
+
         if self.signature is None:
                 val = np.zeros(shape=(2,))
                 self.signature = Parameter(torch.from_numpy(val.astype(np.int64)), requires_grad=False)
@@ -257,7 +258,7 @@ class SecondaryLearnedEmbedding(nn.Module):
         self.underlying_embedding = underlying_embedding
         self.learn_model = learn_model
         self.weight = underlying_embedding.weight
-      
+
     def forward(self, indices: torch.Tensor, offsets: Optional[torch.Tensor] = None) -> torch.Tensor:
         i_shape = indices.shape
         primary_embedding = self.underlying_embedding(indices, offsets)
@@ -295,7 +296,7 @@ class FunctionalEmbedding(nn.Module):
         self.bits = 32
         mask = 2**torch.arange(32)
         self.mask = mask.to("cuda:0")
-        
+
     def forward(self, indices: torch.Tensor) -> torch.Tensor:
         # indices are N x 1
         hashes =  (indices * self.A + self.B) # no mod because a and b are odd  like taking mod 2^32
@@ -306,8 +307,8 @@ class FunctionalEmbedding(nn.Module):
             return self.learn_model(input_mlp)
         else:
             return input_mlp
-        
-        
+
+
 def get_functional_embedding(embedding_dim, str_mlp, dev="cuda:0"):
     if str_mlp is None:
         return FunctionalEmbedding(embedding_dim, None, 0).to(dev)
