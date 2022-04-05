@@ -339,11 +339,13 @@ __global__ void compute_grad_weight_bags(
     torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> orig_hash_idx_idx,
     torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> output_grad,
     torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> offset2bag,
+    torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> bag_size,
     int64_t embedding_dim,
     int64_t numel,
     torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> partial_segment_offset,
     int64_t num_of_partial_segments,
-    torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> grad_weight_per_partial
+    torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> grad_weight_per_partial,
+    int64_t mode
 ) 
 {
     const int partial_id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -359,10 +361,13 @@ __global__ void compute_grad_weight_bags(
         const int orig_cat_idx = orig_hash_idx / embedding_dim; // in range [0, |indices|)
         const int feature_idx =  orig_hash_idx % embedding_dim;     // in range [0, embedding_dim)
         const int bag_idx = offset2bag[orig_cat_idx];     
-        grad_acc += output_grad[bag_idx][feature_idx]; 
+        if (mode == MODE_SUM) {
+            grad_acc += output_grad[bag_idx][feature_idx];
+        } else if(mode == MODE_MEAN) {
+            grad_acc += output_grad[bag_idx][feature_idx] / (float) (bag_size[bag_idx]); 
+        }
     }
     grad_weight_per_partial[partial_id] = grad_acc;
-
 }
 
 template<typename scalar_t>
@@ -467,10 +472,11 @@ torch::Tensor hashed_embedding_bag_sum_backward(
     const torch::Tensor& indices,
     const torch::Tensor& offsets,
     const torch::Tensor& offset2bag,
+    const torch::Tensor& bag_size,
     const torch::Tensor& hash_index,
-
     int64_t num_weights,
-    int64_t embedding_dim)
+    int64_t embedding_dim,
+    int64_t mode)
 {
     int64_t numIndices = indices.size(0);
     int64_t numBags = offsets.size(0);
@@ -570,11 +576,13 @@ torch::Tensor hashed_embedding_bag_sum_backward(
             orig_hash_idx_idx.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
             output_grad.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
             offset2bag.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+            bag_size.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
             embedding_dim,
             numel,
             partial_segment_offset.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
             num_of_partial_segments,
-            grad_weight_per_segment.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>()
+            grad_weight_per_segment.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
+            mode
         );
         const int grid2 = ceil_div(num_segments, block);
         sum_and_scatter<scalar_t><<<grid2, block, 0, stream>>>(
@@ -607,15 +615,17 @@ torch::Tensor hashed_embedding_bag_cuda_backward(
     torch::Tensor grad = grad_.contiguous();
     switch (mode) {
         case MODE_SUM:
+        case MODE_MEAN:
             return hashed_embedding_bag_sum_backward(
                 grad_,
                 indices,
                 offsets,
                 offset2bag,
+                bag_size_,
                 hashed_index,
                 num_weights,
-                embedding_dim);
-        case MODE_MEAN:
+                embedding_dim,
+                mode);
         case MODE_MAX:
             //return hashed_embedding_bag_cuda_max()
         default:

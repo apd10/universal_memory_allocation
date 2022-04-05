@@ -35,7 +35,6 @@ class HashedEmbeddingBagFunction(torch.autograd.Function):
             mode_enum = 0
         elif mode == 'mean':
             mode_enum = 1
-            raise ValueError("mean mode not supported")
         elif mode == 'max':
             mode_enum = 2
             raise ValueError("max mode not supported")
@@ -208,7 +207,8 @@ class HashedEmbeddingBag(nn.Module):
             self.keys_to_use,
             self.uma_chunk_size
         )
-        embeddings = embeddings.view(*i_shape, embeddings.shape[-1])
+        if len(i_shape) > 2:
+            embeddings = embeddings.view(*i_shape, embeddings.shape[-1])
         return embeddings
 
 class SecondaryLearnedEmbedding(nn.Module):
