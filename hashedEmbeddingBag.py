@@ -249,7 +249,8 @@ class HashedEmbeddingBag(nn.Module):
             Aembeddings = torch.zeros(original_count, self.embedding_dim, device=indices.device)
             Aembeddings[indx_mask,:] = embeddings[:,:]
             embeddings = Aembeddings
-        embeddings = embeddings.view(*i_shape, embeddings.shape[-1])
+        if len(i_shape) > 1:
+            embeddings = embeddings.view(*i_shape, embeddings.shape[-1])
         return embeddings
 
 class SecondaryLearnedEmbedding(nn.Module):
