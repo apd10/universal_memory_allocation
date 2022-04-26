@@ -142,10 +142,9 @@ class HashedEmbeddingBag(nn.Module):
         val_offset = None,
         seed = 1024,
         uma_chunk_size = 1,
-        padding_idx = None,:
+        padding_idx = None,
         no_bag = False,
-        sparse = False,
-        padding_idx = None )->None:
+        sparse = False)->None:
         super(HashedEmbeddingBag, self).__init__()
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
