@@ -202,7 +202,7 @@ class HashedEmbeddingBag(nn.Module):
               "hmode", hmode, "kmode", keymode, "central", self.central, "key_bits", self.key_bits,
               "keys_to_use", self.keys_to_use,
               "weight_size", self.weight_size,
-              "seed", seed
+              "seed", seed,
               "uma_chunk_size", self.uma_chunk_size,
               "no_bag[backward]", self.no_bag,
               "sparse[backward]", self.sparse)
